@@ -18,9 +18,6 @@ namespace IrcBot
         public string DefaultChannel { get; }
         public bool Connected { get; private set; }
         public string ServerAdress { get; set; }
-        #region Zukunftsmusik
-        [ScriptIgnore] public bool Encryption { get; set; }
-        #endregion
 
         // Benötigte Klassen um eine Verbindung zum Server aufzubauen
         TcpClient tcpClient;
@@ -47,14 +44,17 @@ namespace IrcBot
             Nickname = nickname;
             Realname = realname;
             DefaultChannel = defaultChannel;
-
-
-
-            #region Zukunftsmusik
-            // Setze Verschlüsselung auf true und verschlüssele die Chat-Nachrichten.
-            Encryption = false;
-            #endregion
         }
+
+        public Irc(ClientConfiguration clientConfig)
+        {
+            Hostname = clientConfig.ServerURL;
+            Port = clientConfig.ServerPort;
+            Nickname = clientConfig.Nick;
+            Realname = clientConfig.User;
+            DefaultChannel = clientConfig.DefaultChannel;
+        }
+
         public void Connect()
         {
             try
@@ -121,12 +121,6 @@ namespace IrcBot
         public void ChatMessage(string Nachricht, string Ziel)
         {
             // PRIVMSG #Raum :Die Chatnachricht
-
-            #region Zukunftsmusik
-            if (Encryption)
-                Nachricht = "::CRYPTED::" + EncryptChatMessage(Nachricht);
-            #endregion
-
             string Message = "PRIVMSG " + Ziel + " :" + Nachricht;
             MessageQueue.Enqueue(Message);
 
@@ -148,9 +142,6 @@ namespace IrcBot
             QueueIsRunning = false;
         }
 
-        #region Vorbereitung Folge #003
-
-        #region Passwort-Generator
         /// <summary>
         /// Generiert ein zufälliges Passwort.
         /// </summary>
@@ -166,19 +157,6 @@ namespace IrcBot
             }
             return sb.ToString();
         }
-        #endregion
 
-        #endregion
-
-        #region Zukunftsmusik
-        private string EncryptChatMessage(string Message)
-        {
-            return Convert.ToBase64String(System.Text.ASCIIEncoding.UTF8.GetBytes(Message));
-        }
-        private string DecryptChatMessaage(string Message)
-        {
-            return ASCIIEncoding.UTF8.GetString(Convert.FromBase64String(Message));
-        }
-        #endregion
     }
 }

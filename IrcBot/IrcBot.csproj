@@ -60,6 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ClientConfiguration.cs" />
+    <Compile Include="StringCipher.cs" />
     <Compile Include="Irc.cs" />
     <Compile Include="IrcBot.cs" />
     <Compile Include="IrcMessage.cs" />

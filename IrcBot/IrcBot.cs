@@ -62,11 +62,12 @@ namespace IrcBot
             Console.Clear();
             Console.WriteLine("--- Neue Konfiguration anlegen");
 
-            string server, nickname, realname, defaultChannel, fileName;
-            int port;
+            string fileName;
+            int port; // als Zwischenspeicher benötigt, da eine Eigenschaft nicht als out-Parameter genutzt werden kann.
+            ClientConfiguration newConfig = new ClientConfiguration();
 
             Console.Write("IRC-Server Hostname: ");
-            server = Console.ReadLine();
+            newConfig.ServerURL = Console.ReadLine();
 
             Console.Write("IRC-Server Port: ");
             while(!int.TryParse(Console.ReadLine(),out port) || port < 0 || port > 65535)
@@ -74,19 +75,21 @@ namespace IrcBot
                 Console.WriteLine("Ungültige Portangabe. Bitte geben Sie einen Port von 0 bis 65535 ein.");
                 Console.Write("IRC-Server Port: ");
             }
+            newConfig.ServerPort = port;
 
             Console.Write("Bot Nickname: ");
-            while(!Regex.IsMatch(nickname = Console.ReadLine(), @"^(.[^ ,#]+)$"))
+            while(!Regex.IsMatch(newConfig.Nick = Console.ReadLine(), @"^(.[^ ,#]+)$"))
             {
                 Console.WriteLine("Ungüliges Format für den Nickname. Ein Nickname darf keine Kommata, kein #-Symbol und kein Leerzeichen enthalten.");
                 Console.Write("Bot Nickname: ");
             }
+            
 
             Console.Write("Bot Realname: ");
-            realname = Console.ReadLine();
+            newConfig.User = Console.ReadLine();
 
             Console.Write("Default Channel: ");
-            while (!Regex.IsMatch(defaultChannel = Console.ReadLine(), "^#(.[^, ]+)$"))
+            while (!Regex.IsMatch(newConfig.DefaultChannel = Console.ReadLine(), "^#(.[^, ]+)$"))
             {
                 Console.WriteLine("Ungültiger Channelname. Ein Channel beginnt mit einem #-Symbol, darf keine Kommata und keine Leerzeichen enthalten.");
                 Console.Write("Default Channel: ");
@@ -103,8 +106,8 @@ namespace IrcBot
                 if (!Directory.Exists(saveDirectory))
                     Directory.CreateDirectory(saveDirectory);
 
-                // Configurationsdatei mit Hilfe unserer statischen Funktion speichern
-                ClientConfiguration.SaveConfig(saveDirectory + fileName, new Irc(server, port, nickname, realname, defaultChannel));
+                // Konfigurationsdatei mit Hilfe unserer statischen Funktion speichern
+                ClientConfiguration.SaveConfig(saveDirectory + fileName,newConfig);
                 Console.WriteLine("Konfigurationsdatei wurde angelegt. Bitte starten Sie das Programm zukuenftig mit dem Parameter cfg=" + saveDirectory + fileName);
                 Console.ReadKey();
 
@@ -126,7 +129,7 @@ namespace IrcBot
         {
             #region Lade Konfiguration wenn vorhanden. Ansonsten nutze Standartwerte
             if (ConfigFile != null)
-                IrcConnection = Irc.LoadConfig(ConfigFile);
+                IrcConnection = new Irc(ClientConfiguration.LoadConfig(ConfigFile));
 
             #endregion
             Console.ReadKey();
