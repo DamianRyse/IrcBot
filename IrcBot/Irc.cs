@@ -15,7 +15,6 @@ namespace IrcBot
         public int Port { get; }
         public string Nickname { get; }
         public string Realname { get; }
-        public string DefaultChannel { get; }
         public bool Connected { get; private set; }
         public string ServerAdress { get; set; }
 
@@ -43,16 +42,14 @@ namespace IrcBot
             Port = port;
             Nickname = nickname;
             Realname = realname;
-            DefaultChannel = defaultChannel;
         }
 
         public Irc(ClientConfiguration clientConfig)
         {
-            Hostname = clientConfig.ServerURL;
-            Port = clientConfig.ServerPort;
-            Nickname = clientConfig.Nick;
-            Realname = clientConfig.User;
-            DefaultChannel = clientConfig.DefaultChannel;
+            Hostname = clientConfig.ServerDetails.ServerURL;
+            Port = clientConfig.ServerDetails.ServerPort;
+            Nickname = clientConfig.ServerDetails.Nick;
+            Realname = clientConfig.ServerDetails.User;
         }
 
         public void Connect()

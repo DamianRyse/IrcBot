@@ -7,10 +7,6 @@
 
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using System.IO;
 
@@ -19,6 +15,7 @@ namespace IrcBot
     class IrcBot
     {
         Irc IrcConnection;
+        ClientConfiguration clientConfig = null;
         string ConfigFile;
 
 
@@ -65,9 +62,24 @@ namespace IrcBot
             string fileName;
             int port; // als Zwischenspeicher benötigt, da eine Eigenschaft nicht als out-Parameter genutzt werden kann.
             ClientConfiguration newConfig = new ClientConfiguration();
+            newConfig.ServerDetails = new ClientConfiguration.serverDetails();
+
+            newConfig.Channels = new ClientConfiguration.channel[1];
+            newConfig.Channels[0] = new ClientConfiguration.channel();
+
+            newConfig.SuperUsers = new ClientConfiguration.superUser[1];
+            newConfig.SuperUsers[0] = new ClientConfiguration.superUser();
+
+            newConfig.Channels = new ClientConfiguration.channel[1];
+            newConfig.Channels[0] = new ClientConfiguration.channel();
+
+            newConfig.Quotes = new ClientConfiguration.quote[0];
+
+
+
 
             Console.Write("IRC-Server Hostname: ");
-            newConfig.ServerURL = Console.ReadLine();
+            newConfig.ServerDetails.ServerURL = Console.ReadLine();
 
             Console.Write("IRC-Server Port: ");
             while(!int.TryParse(Console.ReadLine(),out port) || port < 0 || port > 65535)
@@ -75,10 +87,10 @@ namespace IrcBot
                 Console.WriteLine("Ungültige Portangabe. Bitte geben Sie einen Port von 0 bis 65535 ein.");
                 Console.Write("IRC-Server Port: ");
             }
-            newConfig.ServerPort = port;
+            newConfig.ServerDetails.ServerPort = port;
 
             Console.Write("Bot Nickname: ");
-            while(!Regex.IsMatch(newConfig.Nick = Console.ReadLine(), @"^(.[^ ,#]+)$"))
+            while(!Regex.IsMatch(newConfig.ServerDetails.Nick = Console.ReadLine(), @"^(.[^ ,#]+)$"))
             {
                 Console.WriteLine("Ungüliges Format für den Nickname. Ein Nickname darf keine Kommata, kein #-Symbol und kein Leerzeichen enthalten.");
                 Console.Write("Bot Nickname: ");
@@ -86,14 +98,27 @@ namespace IrcBot
             
 
             Console.Write("Bot Realname: ");
-            newConfig.User = Console.ReadLine();
+            newConfig.ServerDetails.User = Console.ReadLine();
 
             Console.Write("Default Channel: ");
-            while (!Regex.IsMatch(newConfig.DefaultChannel = Console.ReadLine(), "^#(.[^, ]+)$"))
+            while (!Regex.IsMatch(newConfig.Channels[0].Name = Console.ReadLine(), "^#(.[^, ]+)$"))
             {
                 Console.WriteLine("Ungültiger Channelname. Ein Channel beginnt mit einem #-Symbol, darf keine Kommata und keine Leerzeichen enthalten.");
                 Console.Write("Default Channel: ");
             }
+
+            Console.Write("Default Channel Password (leave empty for none): ");
+            newConfig.Channels[0].Password = Console.ReadLine();
+            newConfig.Channels[0].Autojoin = true;
+
+            Console.Write("Default Superuser: ");
+            while (!Regex.IsMatch(newConfig.SuperUsers[0].Username = Console.ReadLine(), "^([a-zA-Z0-9]+)$"))
+            {
+                Console.WriteLine("Ungültiger Superuser-Name. Erlaubte Zeichen: a-z, A-Z und 0-9");
+                Console.Write("Default Channel: ");
+            }
+            Console.Write("Default Superuser Password: ");
+            newConfig.SuperUsers[0].SetPassword(Console.ReadLine());
 
             // Pfad für die Konfigurationsdatei festlegen. ../Eigene Dokumente/IrcBot/<Dateiname>
             string saveDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) + Path.DirectorySeparatorChar + "IrcBot" + Path.DirectorySeparatorChar;
@@ -111,8 +136,8 @@ namespace IrcBot
                 Console.WriteLine("Konfigurationsdatei wurde angelegt. Bitte starten Sie das Programm zukuenftig mit dem Parameter cfg=" + saveDirectory + fileName);
                 Console.ReadKey();
 
-                // Die globale Variable festlegen und so tun als ob der Benutzer den cfg= Parameter benutzt hätte.
-                ConfigFile = saveDirectory + fileName;
+                // Programm beenden.
+                Environment.Exit(1);
             }
             catch (Exception ex)
             {
@@ -128,11 +153,24 @@ namespace IrcBot
         private void GetData()
         {
             #region Lade Konfiguration wenn vorhanden. Ansonsten nutze Standartwerte
-            if (ConfigFile != null)
-                IrcConnection = new Irc(ClientConfiguration.LoadConfig(ConfigFile));
+            if (!string.IsNullOrWhiteSpace(ConfigFile))
+            {
+                try
+                {
+                    clientConfig = ClientConfiguration.LoadConfig(ConfigFile);
+                    IrcConnection = new Irc(clientConfig);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Fehler beim Laden der Konfiguration: " + ex.Message);
+                    Console.ReadKey();
+                    return; // return beendet die Methode und damit das Programm.
+                }
+            }
+               
 
             #endregion
-            Console.ReadKey();
+
             // Verbindung zum IRC-Server aufbauen
             IrcConnection.Connect();
 
@@ -148,10 +186,9 @@ namespace IrcBot
             {
                 string Data = IrcConnection.readData();
 
-                if(Data != null)
+                if(!string.IsNullOrWhiteSpace(Data))
                 {
                     Console.WriteLine("> " + Data);
-
  
                     #region PING
                     if (Data.Substring(0,6) == "PING :")
@@ -178,14 +215,12 @@ namespace IrcBot
                         }
                         else if(tRegEx[2] == "376")
                         {
-                            IrcConnection.joinRoom("#PatricksTestRoom");
-                            IrcConnection.ChatMessage("Dies ist eine Testnachricht", "#PatricksTestRoom");
+                            AutoJoinChannels(clientConfig.Channels);
                         }
-                        
                     }
                     #endregion
 
-                    #region Vorbereitung Folge #003 - IrcMessages
+                    #region PRIVMSG
                     if (Regex.IsMatch(Data, @":([^@!\ ]*)(.)*PRIVMSG\ ([^@!\ ]*)\ :"))
                     {
                         // :|54H|DamianRyse!~|54H|Dami@DamianRyse.users.quakenet.org PRIVMSG #DamiansTestRoom :test
@@ -218,54 +253,144 @@ namespace IrcBot
             #region !quit || !exit
             if (Message.Message.ToLower() == "!quit" || Message.Message.ToLower() == "!exit")
             {
-                // An dieser Stelle ist es sinnvoll, eine Überprüfung einzubauen, ob der User überhaupt berechtigt ist,
-                // diesen Befehl auszuführen. Dies könnte man zum Beispiel über ein integriertes Benutzer-System
-                // realisieren. User müssen sich dann bei bestimmten Befehlen vorher beim Bot "einloggen" um ihn verwalten
-                // zu können. Eine andere Möglichkeit wäre, das nur Operatoren (Benutzer mit dem Flag +o) diese Befehle
-                // ausführen dürfen.
+                if(IsUserLoggedIn(Message.Author,clientConfig.SuperUsers) != null)
+                {
+                    // Verabschiedung im IRC-Kanal
+                    IrcConnection.ChatMessage("Programm beendet. Auf wiedersehen!", Message.Channel);
 
-                // Verabschiedung im IRC-Kanal
-                IrcConnection.ChatMessage("Programm beendet. Auf wiedersehen!", Message.Channel);
+                    // Dem Server mitteilen, das die Verbindung getrennt werden soll.
+                    IrcConnection.sendData("QUIT");
 
-                // Dem Server mitteilen, das die Verbindung getrennt werden soll.
-                IrcConnection.sendData("QUIT");
-
-                // Das Programm beenden.
-                Environment.Exit(0);
+                    // Das Programm beenden.
+                    Environment.Exit(0);
+                }
+                else
+                {
+                    IrcConnection.ChatMessage("Nur angemeldete Superuser dürfen diesen Befehl ausführen.", Message.Channel);
+                    return;
+                }
             }
             #endregion
 
             #region !join #room
             if (Regex.IsMatch(Message.Message, @"^!(?i)join " + RegEx_Channelname + "$"))
             {
-                // An dieser Stelle ist es sinnvoll, eine Überprüfung einzubauen, ob der User überhaupt berechtigt ist,
-                // diesen Befehl auszuführen. Dies könnte man zum Beispiel über ein integriertes Benutzer-System
-                // realisieren. User müssen sich dann bei bestimmten Befehlen vorher beim Bot "einloggen" um ihn verwalten
-                // zu können. Eine andere Möglichkeit wäre, das nur Operatoren (Benutzer mit dem Flag +o) diese Befehle
-                // ausführen dürfen.
+                if(IsUserLoggedIn(Message.Author,clientConfig.SuperUsers) != null)
+                {
+                    string[] args = Regex.Split(Message.Message, @"^!(?i)join " + RegEx_Channelname + "$");
 
-                string[] args = Regex.Split(Message.Message, @"^!(?i)join " + RegEx_Channelname + "$");
-
-                IrcConnection.ChatMessage("Joining channel #" + args[1] + "...", Message.Channel);
-                IrcConnection.joinRoom("#" + args[1]);
-                return;
+                    IrcConnection.ChatMessage("Joining channel #" + args[1] + "...", Message.Channel);
+                    IrcConnection.joinRoom("#" + args[1]);
+                    return;
+                }
+                else
+                {
+                    IrcConnection.ChatMessage("Nur angemeldete Superuser dürfen diesen Befehl ausführen.", Message.Channel);
+                    return;
+                }
             }
             #endregion
 
             #region !leave
             if (Message.Message.ToLower() == "!leave")
             {
-                // An dieser Stelle ist es sinnvoll, eine Überprüfung einzubauen, ob der User überhaupt berechtigt ist,
-                // diesen Befehl auszuführen. Dies könnte man zum Beispiel über ein integriertes Benutzer-System
-                // realisieren. User müssen sich dann bei bestimmten Befehlen vorher beim Bot "einloggen" um ihn verwalten
-                // zu können. Eine andere Möglichkeit wäre, das nur Operatoren (Benutzer mit dem Flag +o) diese Befehle
-                // ausführen dürfen.
+                if(IsUserLoggedIn(Message.Author,clientConfig.SuperUsers) != null)
+                {
+                    IrcConnection.ChatMessage("Verlasse den Channel. Bye!", Message.Channel);
+                    IrcConnection.sendData("PART " + Message.Channel);
+                    return;
+                }
+                else
+                {
+                    IrcConnection.ChatMessage("Nur angemeldete Superuser dürfen diesen Befehl ausführen.", Message.Channel);
+                    return;
+                }
+            }
+            #endregion
 
-                IrcConnection.ChatMessage("Leaving channel. Bye!", Message.Channel);
-                IrcConnection.sendData("PART " + Message.Channel);
+            #region !login <UserName> <Password>
+            if (Regex.IsMatch(Message.Message, @"!(?i)login ([a-zA-Z0-9]+) (.)"))
+            {
+                string[] args = Regex.Split(Message.Message, @"!(?i)login ([a-zA-Z0-9]+) (.+)");
+                Console.WriteLine("Benutzername: " + args[1]);
+                Console.WriteLine("Passwort: " + args[2]);
+                foreach (ClientConfiguration.superUser user in clientConfig.SuperUsers)
+                {
+                    if (!string.IsNullOrWhiteSpace(user.Username) && user.Username == args[1])
+                    {
+                        if (user.LogIn(Message.Author, args[2]))
+                        {
+                            IrcConnection.ChatMessage("Login erfolgreich. Du wirst automatisch nach 30 Minuten ausgeloggt.", Message.Author);
+                            IrcConnection.ChatMessage("Oder Benutze !logout, wenn Du Dich vorher abmelden möchtest.", Message.Author);
+                            return;
+                        }
+                    }
+                }
+                IrcConnection.ChatMessage("Benutzername und/oder Passwort falsch.", Message.Author);
                 return;
             }
             #endregion
+
+            #region !logout
+            if (Message.Message.ToLower() == "!logout")
+            {
+                ClientConfiguration.superUser user;
+                if ((user = IsUserLoggedIn(Message.Author,clientConfig.SuperUsers)) != null)
+                {
+                    user.LogOut();
+                    IrcConnection.ChatMessage("Du wurdest erfolgreich abgemeldet.", Message.Author);
+                    return;
+                }
+                else
+                {
+                    IrcConnection.ChatMessage("Du bist nicht eingeloggt.", Message.Author);
+                    return;
+                }
+            }
+            #endregion
+
+        }
+
+        private void AutoJoinChannels(ClientConfiguration.channel[] channels)
+        {
+            // Prüfen ob ein Channel-Array existiert und Werte beinhaltet
+            if(channels != null && channels.Length > 0)
+            {
+                // Alle Channels durchlaufen
+                foreach(ClientConfiguration.channel channel in channels)
+                {
+                    // Wenn Channel-Eigenschaft Autojoin = true, dann Channel betreten.
+                    if(channel.Autojoin)
+                    {
+                        // Prüfen, ob ein Passwort gesetzt wurde.
+                        if (string.IsNullOrWhiteSpace(channel.Password))
+                            IrcConnection.joinRoom(channel.Name + channel.Password);
+                        else
+                            IrcConnection.joinRoom(channel.Name + " " + channel.GetPassword());
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Prüft, ob der Benutzer eingeloggt ist und gibt das entsprechende superUser-Objekt zurück. Andernfalls wird null zurückgegeben.
+        /// </summary>
+        /// <param name="Nickname">Der Nickname, der überprüft werden soll.</param>
+        /// <param name="Superusers">Das Array mit den gespeicherten Superusern.</param>
+        /// <returns></returns>
+        private ClientConfiguration.superUser IsUserLoggedIn(string Nickname, ClientConfiguration.superUser[] Superusers)
+        {
+            if (Superusers != null && Superusers.Length > 0)
+            {
+                foreach(ClientConfiguration.superUser user in Superusers)
+                {
+                    if (user.isLoggedIn && user.loggedInUser == Nickname)
+                        return user;
+                }
+                return null;
+            }
+            else
+                return null;
         }
     }
 }
