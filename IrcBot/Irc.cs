@@ -1,10 +1,13 @@
-﻿using System;
+﻿// Irc.cs
+// Enthält die Grundfunktionen zum Verbinden und zur Kommunikation mit
+// einem IRC-Server.
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Net.Sockets;
 using System.IO;
 using System.Text.RegularExpressions;
-using System.Web.Script.Serialization;
 
 namespace IrcBot
 {

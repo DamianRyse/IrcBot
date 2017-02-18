@@ -16,7 +16,7 @@ namespace IrcBot
     {
         Irc IrcConnection;
         ClientConfiguration clientConfig = null;
-        string ConfigFile;
+        string ConfigFile { get; set; }
 
 
         static void Main(string[] args)

@@ -1,4 +1,7 @@
-﻿using System;
+﻿// IrcMessage.cs
+// Stellt eine Klasse für die PRIVMSG-Datenströme bereit
+
+using System;
 
 namespace IrcBot
 {

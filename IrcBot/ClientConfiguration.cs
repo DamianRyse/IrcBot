@@ -1,4 +1,17 @@
-﻿using System.IO;
+﻿// ClientConfiguration.cs
+// Enthält die Klasse ClientConfiguration mit einigen untergeordnen Klassen
+// welche Informationen zum IRC-Server enhält, mit dem sich der Bot beim
+// Programmstart  verbinden soll. Darüber hinaus werden hier auch erweiterte
+// Einstellungen gespeichert, wie alle registrierten Superuser, alle Channels,
+// die beim Start automatisch betreten werden sollen und alle Zitate, die 
+// im Laufe der Anwendung eingetragen wurden und werden.
+
+// Dadurch, das alle relevanten Informationen in Subklassen gespeichert sind
+// und mit der statischen Methode SaveConfig die Hauptklasse serialisiert
+// wird, lässt uns das die Möglichkeit der dynamischen Erweiterbarkeit der 
+// Klasse ClientConfiguration offen.
+
+using System.IO;
 using System.Web.Script.Serialization;
 
 namespace IrcBot
