@@ -22,6 +22,7 @@ namespace IrcBot
         public quote[] Quotes { get; set; }
         public superUser[] SuperUsers { get; set; }
         public channel[] Channels { get; set; }
+        public customAction[] CustomActions { get; set; }
 
         public class serverDetails
         {
@@ -212,6 +213,40 @@ namespace IrcBot
                     return null;
             }
             public bool Autojoin { get; set; }
+        }
+
+        public class customAction
+        {
+            public string Command { get; set; }
+            public string Response { get; set; }
+            public bool SuperuserOnly { get; set; }
+            public string[] Placeholders { get; set; }
+            
+            public string GetResponse(params string[] Parameters)
+            {
+                // Sollte Response keinen Wert enthalten, null zurückgeben.
+                if (string.IsNullOrEmpty(Response))
+                    return null;
+
+                string returnVal = Response;
+
+                // Wenn mindestens 1 Parameter angegeben wurde...
+                if (Parameters != null && Parameters.Length > 0)
+                {
+                    // -> Es existieren Platzhalter. Es dürfen nicht mehr Parameter als Platzhalter sein.
+                    if (Placeholders != null && Placeholders.Length > 0 && Parameters.Length <= Placeholders.Length)
+                    {
+                        for (int i = 0; i < Parameters.Length; i++)
+                        {
+                            returnVal = returnVal.Replace(Placeholders[i], Parameters[i]);
+                        }
+                    }
+                    else
+                        returnVal = null;
+                }
+                return returnVal;
+            }
+
         }
 
         public static ClientConfiguration LoadConfig(string file)

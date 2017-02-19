@@ -242,11 +242,63 @@ namespace IrcBot
             const string RegEx_Channelname = "#(.[^, ]+)"; // Ein # muss vorangestellt sein, es darf kein , und kein Leerzeichen im Namen sein.
 
             // Prüfen, ob Nachricht einen gültigen Befehl enthält und dann entsprechend darauf reagieren.
+
+            #region CustomActions
+            if(Regex.IsMatch(Message.Message, "^!([a-zA-Z0-9]+)(.+)?$"))
+            {
+                string[] args = Regex.Split(Message.Message, @"^!([a-zA-Z0-9]+)(.+)?$");
+
+                foreach (ClientConfiguration.customAction action in clientConfig.CustomActions)
+                {
+                    if(action.Command.ToLower() == "!" + args[1].ToLower())
+                    {
+                        if(action.SuperuserOnly && IsUserLoggedIn(Message.Author, clientConfig.SuperUsers) == null)
+                        {
+                            IrcConnection.ChatMessage("Nur angemeldete Superuser dürfen diesen Befehl ausführen.", Message.Channel);
+                            break;
+                        }
+
+                        string response;
+                        if (string.IsNullOrWhiteSpace(args[2]))
+                            response = action.GetResponse();
+                        else
+                            response = action.GetResponse(args[2].Split(new char[] {' '},StringSplitOptions.RemoveEmptyEntries));
+
+                        if(!string.IsNullOrWhiteSpace(response))
+                            IrcConnection.ChatMessage(response, Message.Channel);
+
+                    }
+                }
+            }
+            #endregion
+
             #region !hello
             if (Message.Message.ToLower() == "!hello")
             {
                 IrcConnection.ChatMessage("Hallo " + Message.Author + ", ich bin ein IRC Bot. Ich kann mich zu einem beliebigen IRC-Server verbinden und reagiere bereits auf einige Befehle.", Message.Channel);
                 IrcConnection.ChatMessage("Ausserdem bin ich Teil eines YouTube-Tutorials!", Message.Channel);
+            }
+            #endregion
+
+            #region !help
+            if (Message.Message.ToLower() == "!help")
+            {
+                if(clientConfig.CustomActions != null && clientConfig.CustomActions.Length > 0)
+                {
+                    foreach(ClientConfiguration.customAction action in clientConfig.CustomActions)
+                    {
+                        string placeholder = "";
+                        if(action.Placeholders != null && action.Placeholders.Length > 0)
+                        {
+                            for(int i = 0; i < action.Placeholders.Length; i++ )
+                            {
+                                placeholder += action.Placeholders[i] + " ";
+                            }
+                        }
+                        // --> !Befehl %Params% -> Response Message
+                        IrcConnection.ChatMessage("--> " + action.Command + " " + placeholder + "-> " + action.Response, Message.Channel);
+                    }
+                }
             }
             #endregion
 
@@ -291,6 +343,49 @@ namespace IrcBot
             }
             #endregion
 
+            #region !autojoin
+            if (Message.Message.ToLower() == "!autojoin")
+            {
+                if (IsUserLoggedIn(Message.Author, clientConfig.SuperUsers) != null) // User muss eingeloggt sein
+                {
+                    if(clientConfig.Channels != null && clientConfig.Channels.Length > 0) // Prüfen ob Array null ist oder kein Element besitzt
+                    {
+                        foreach(ClientConfiguration.channel channel in clientConfig.Channels) // Schleife durch alle Channels
+                        {
+                            if (channel.Name.ToLower() == Message.Channel.ToLower()) // Channel wurde in der Konfiguration gefunden
+                            {
+                                if(channel.Autojoin)
+                                {
+                                    channel.Autojoin = false;
+                                    IrcConnection.ChatMessage("Dieser Channel wird absofort nicht mehr automatisch betreten.", Message.Channel);
+                                }
+                                else
+                                {
+                                    channel.Autojoin = true;
+                                    IrcConnection.ChatMessage("Dieser Channel wird absofort automatisch betreten",Message.Channel);
+                                }
+                                ClientConfiguration.SaveConfig(ConfigFile, clientConfig);
+                                return;
+                            }
+                        }
+                        // Channel wurde nicht im Array gefunden
+                        clientConfig.Channels = toolbox.ResizeArray<ClientConfiguration.channel>(clientConfig.Channels, 1);
+                        clientConfig.Channels[clientConfig.Channels.Length - 1] = new ClientConfiguration.channel();
+                        clientConfig.Channels[clientConfig.Channels.Length - 1].Autojoin = true;
+                        clientConfig.Channels[clientConfig.Channels.Length - 1].Name = Message.Channel;
+                        ClientConfiguration.SaveConfig(ConfigFile, clientConfig);
+                        IrcConnection.ChatMessage("Dieser Channel wird absofort automatisch betreten", Message.Channel);
+                        return;
+                    }
+                }
+                else
+                {
+                    IrcConnection.ChatMessage("Nur angemeldete Superuser dürfen diesen Befehl ausführen.", Message.Channel);
+                    return;
+                }
+            }
+            #endregion
+
             #region !leave
             if (Message.Message.ToLower() == "!leave")
             {
@@ -312,8 +407,6 @@ namespace IrcBot
             if (Regex.IsMatch(Message.Message, @"!(?i)login ([a-zA-Z0-9]+) (.)"))
             {
                 string[] args = Regex.Split(Message.Message, @"!(?i)login ([a-zA-Z0-9]+) (.+)");
-                Console.WriteLine("Benutzername: " + args[1]);
-                Console.WriteLine("Passwort: " + args[2]);
                 foreach (ClientConfiguration.superUser user in clientConfig.SuperUsers)
                 {
                     if (!string.IsNullOrWhiteSpace(user.Username) && user.Username == args[1])
@@ -344,6 +437,68 @@ namespace IrcBot
                 else
                 {
                     IrcConnection.ChatMessage("Du bist nicht eingeloggt.", Message.Author);
+                    return;
+                }
+            }
+            #endregion
+
+            #region !addAction <!command> <Response> -> <Params>
+            if (Regex.IsMatch(Message.Message, @"^!(?i)addAction !([a-zA-Z0-9]+) (.*?)( \-> (.+))?$"))
+            {
+                if (IsUserLoggedIn(Message.Author, clientConfig.SuperUsers) != null)
+                {
+                    string[] args = Regex.Split(Message.Message, @"^!(?i)addAction !([a-zA-Z0-9]+) (.*?)( \-> (.+))?$");
+
+                    ClientConfiguration.customAction newCustomAction;
+                    if (clientConfig.CustomActions == null || clientConfig.CustomActions.Length < 1)
+                    {
+                        clientConfig.CustomActions = new ClientConfiguration.customAction[1];
+                        newCustomAction = (clientConfig.CustomActions[0] = new ClientConfiguration.customAction());
+                    }
+                    else
+                    {
+                        clientConfig.CustomActions = toolbox.ResizeArray<ClientConfiguration.customAction>(clientConfig.CustomActions, 1);
+                        clientConfig.CustomActions[clientConfig.CustomActions.Length - 1] = new ClientConfiguration.customAction();
+                    }
+
+                    // Keine Parameter
+                    if (args.Length == 4)
+                    {
+                        clientConfig.CustomActions[clientConfig.CustomActions.Length - 1].Command = "!" + args[1];
+                        clientConfig.CustomActions[clientConfig.CustomActions.Length - 1].Placeholders = null;
+                        clientConfig.CustomActions[clientConfig.CustomActions.Length - 1].Response = args[2];
+                    }
+                    // Mit Parameter
+                    else if (args.Length == 6)
+                    {
+                        clientConfig.CustomActions[clientConfig.CustomActions.Length - 1].Command = "!" + args[1];
+                        clientConfig.CustomActions[clientConfig.CustomActions.Length - 1].Placeholders = args[4].Split(Convert.ToChar(" "));
+                        clientConfig.CustomActions[clientConfig.CustomActions.Length - 1].Response = args[2];
+                    }
+                    // Konfigurationsdatei speichern
+                    ClientConfiguration.SaveConfig(ConfigFile, clientConfig);
+                    IrcConnection.ChatMessage("Erfolg: Action gespeichert!", Message.Channel);
+                }
+                else
+                {
+                    IrcConnection.ChatMessage("Nur angemeldete Superuser dürfen diesen Befehl ausführen.", Message.Channel);
+                    return;
+                }
+
+            }
+            else if(Regex.IsMatch(Message.Message, @"^!(?i)addAction (.+)?$"))
+            {
+                if (IsUserLoggedIn(Message.Author, clientConfig.SuperUsers) != null)
+                {
+                    IrcConnection.ChatMessage("Du hast den !addAction-Befehl falsch benutzt. Richtig sind folgende Schreibweisen:", Message.Channel);
+                    IrcConnection.ChatMessage("-> !addAction !radio 5house.fm is ein geiler Radiosender", Message.Channel);
+                    IrcConnection.ChatMessage("-> !addAction !radio %radio% ist ein geiler Radiosender -> %radio%", Message.Channel);
+                    IrcConnection.ChatMessage("...wobei der Parameter-Name beliebig benannt werden kann. Es können auch mehrere Parameter verwendet werden.", Message.Channel);
+                    IrcConnection.ChatMessage("-> !addaction !radio %radio% ist das geilste Radio der %Ort% -> %radio% %Ort% ", Message.Channel);
+                }
+                else
+                {
+                    IrcConnection.ChatMessage("Nur angemeldete Superuser dürfen diesen Befehl ausführen.", Message.Channel);
                     return;
                 }
             }
