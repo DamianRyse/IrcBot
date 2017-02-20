@@ -8,6 +8,8 @@ using System.Text;
 using System.Net.Sockets;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Timers;
+using System.Threading.Tasks;
 
 namespace IrcBot
 {
@@ -16,8 +18,8 @@ namespace IrcBot
         // Eigenschaften der Klasse
         public string Hostname { get; }
         public int Port { get; }
-        public string Nickname { get; }
-        public string Realname { get; }
+        public string Nickname { get; private set; }
+        public string Realname { get; private set; }
         public bool Connected { get; private set; }
         public string ServerAdress { get; set; }
 
@@ -91,6 +93,7 @@ namespace IrcBot
             }
             catch (Exception ex)
             {
+                Connected = false;
                 return "COULD NOT READ DATA: " + ex.Message;
             }
         }
@@ -106,7 +109,14 @@ namespace IrcBot
             catch (Exception ex)
             {
                 Console.WriteLine("COULD NOT SEND DATA: " + ex.Message);
+                Connected = false;
             }
+        }
+
+        public void ChangeNickname(string Nickname)
+        {
+            sendData("NICK " + Nickname);
+            this.Nickname = Nickname;
         }
 
         public void joinRoom(string Raumname)
@@ -156,6 +166,13 @@ namespace IrcBot
                 sb.Append(Convert.ToChar((byte)rnd.Next(65,130))).ToString();
             }
             return sb.ToString();
+        }
+
+        public int Ping()
+        {
+            int i = new Random().Next(100000, 999999);
+            sendData("PING :" + i);
+            return i;
         }
 
     }

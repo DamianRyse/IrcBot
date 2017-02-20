@@ -174,19 +174,11 @@ namespace IrcBot
             // Verbindung zum IRC-Server aufbauen
             IrcConnection.Connect();
 
-            // Verbindung prüfen
-            if (!IrcConnection.Connected)
-            {
-                Console.WriteLine("VERBINDUNG ZUM SERVER KONNTE NICHT HERGESTELLT WERDEN.");
-                Console.ReadKey();
-                return;
-            }
-
-            while(true)
+            while(IrcConnection.Connected)
             {
                 string Data = IrcConnection.readData();
 
-                if(!string.IsNullOrWhiteSpace(Data))
+                if (!string.IsNullOrWhiteSpace(Data))
                 {
                     Console.WriteLine("> " + Data);
  
@@ -197,10 +189,11 @@ namespace IrcBot
                         IrcConnection.sendData("PONG :" + tPing[1]);
                     }
                     #endregion
+
                     #region Server Messages
                     if (Regex.IsMatch(Data, @":(.+) ([\d]{3}) (.+) :(.+)"))
                     {
-                        string[] tRegEx = Regex.Split(Data, @":(.+) ([\d]{3}) (.+) :(.+)");
+                        string[] tRegEx = Regex.Split(Data, @":(.+) ([\d]{3}) (.+) (:)?(.+)");
                         // tRegEx[0] = null
                         // tRegEx[1] = Server-Hostname
                         // tRegEx[2] = Numeric Response
@@ -209,13 +202,22 @@ namespace IrcBot
                         // tRegEx[5] = null
 
 
-                        if (tRegEx[2] == "001")
+                        switch (int.Parse(tRegEx[2]))
                         {
-                            IrcConnection.ServerAdress = tRegEx[1];
-                        }
-                        else if(tRegEx[2] == "376")
-                        {
-                            AutoJoinChannels(clientConfig.Channels);
+                            case (int)NumericResponses.RPL_WELCOME:
+                                IrcConnection.ServerAdress = tRegEx[1];
+                                break;
+                            case (int)NumericResponses.RPL_ENDOFMOTD:
+                                AutoJoinChannels(clientConfig.Channels);
+                                break;
+                            case (int)NumericResponses.ERR_NICKNAMEINUSE: // Wenn Nickname bereits verwendet, eine zufällige dreistellige Ziffer hintendranhängen.
+                                IrcConnection.ChangeNickname(clientConfig.ServerDetails.Nick + new Random().Next(100, 1000));
+                                break;
+                            case (int)NumericResponses.ERR_YOUWILLBEBANNED:
+                                Console.WriteLine("IMPORTANT: Server is going to deny your access.");
+                                break;
+
+                            // ToDo: Weitere wichtige NumericReplies einbinden und verarbeiten.
                         }
                     }
                     #endregion
@@ -230,9 +232,19 @@ namespace IrcBot
                     }
                     #endregion
 
-
                 }
             }
+            Console.WriteLine("Reconnect in 5 Minuten...");
+            System.Threading.Thread.Sleep(60000);
+            Console.WriteLine("Reconnect in 4 Minuten...");
+            System.Threading.Thread.Sleep(60000);
+            Console.WriteLine("Reconnect in 3 Minuten...");
+            System.Threading.Thread.Sleep(60000);
+            Console.WriteLine("Reconnect in 2 Minuten...");
+            System.Threading.Thread.Sleep(60000);
+            Console.WriteLine("Reconnect in 1 Minute...");
+            System.Threading.Thread.Sleep(60000);
+            GetData();
         }
 
         private void Actions(IrcMessage Message)
